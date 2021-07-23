@@ -157,7 +157,7 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
     }
     
     func unitLookUp(key: String) -> HKUnit {
-        guard let try unit = unitDict[key] else {
+        guard let unit = unitDict[key] else {
             return HKUnit.count()
         }
         return unit
