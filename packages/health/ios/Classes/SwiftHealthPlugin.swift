@@ -3,14 +3,14 @@ import UIKit
 import HealthKit
 
 public class SwiftHealthPlugin: NSObject, FlutterPlugin {
-
+    
     let healthStore = HKHealthStore()
     var healthDataTypes = [HKSampleType]()
     var heartRateEventTypes = Set<HKSampleType>()
     var allDataTypes = Set<HKSampleType>()
     var dataTypesDict: [String: HKSampleType] = [:]
     var unitDict: [String: HKUnit] = [:]
-
+    
     // Health Data Type Keys
     let ACTIVE_ENERGY_BURNED = "ACTIVE_ENERGY_BURNED"
     let BASAL_ENERGY_BURNED = "BASAL_ENERGY_BURNED"
@@ -40,18 +40,18 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
     let SLEEP_IN_BED = "SLEEP_IN_BED"
     let SLEEP_ASLEEP = "SLEEP_ASLEEP"
     let SLEEP_AWAKE = "SLEEP_AWAKE"
-
-
+    
+    
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: "flutter_health", binaryMessenger: registrar.messenger())
         let instance = SwiftHealthPlugin()
         registrar.addMethodCallDelegate(instance, channel: channel)
     }
-
+    
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         // Set up all data types
         initializeTypes()
-
+        
         /// Handle checkIfHealthDataAvailable
         if (call.method.elementsEqual("hasPermissions")){
             checkIfHealthDataAvailable(call: call, result: result)
@@ -60,28 +60,28 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
         else if (call.method.elementsEqual("requestAuthorization")){
             requestAuthorization(call: call, result: result)
         }
-
+        
         /// Handle getData
         else if (call.method.elementsEqual("getData")){
             getData(call: call, result: result)
         }
     }
-
+    
     func checkIfHealthDataAvailable(call: FlutterMethodCall, result: @escaping FlutterResult) {
         result(HKHealthStore.isHealthDataAvailable())
     }
-
+    
     func requestAuthorization(call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? NSDictionary
         let types = (arguments?["types"] as? Array) ?? []
-
+        
         var typesToRequest = Set<HKSampleType>()
-
+        
         for key in types {
             let keyString = "\(key)"
             typesToRequest.insert(dataTypeLookUp(key: keyString))
         }
-
+        
         if #available(iOS 11.0, *) {
             healthStore.requestAuthorization(toShare: nil, read: typesToRequest) { (success, error) in
                 result(success)
@@ -91,71 +91,85 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
             result(false)// Handle the error here.
         }
     }
-
+    
     func getData(call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? NSDictionary
         let dataTypeKey = (arguments?["dataTypeKey"] as? String) ?? "DEFAULT"
         let startDate = (arguments?["startDate"] as? NSNumber) ?? 0
         let endDate = (arguments?["endDate"] as? NSNumber) ?? 0
-
+        
         // Convert dates from milliseconds to Date()
         let dateFrom = Date(timeIntervalSince1970: startDate.doubleValue / 1000)
         let dateTo = Date(timeIntervalSince1970: endDate.doubleValue / 1000)
-
+        
         let dataType = dataTypeLookUp(key: dataTypeKey)
         let predicate = HKQuery.predicateForSamples(withStart: dateFrom, end: dateTo, options: .strictStartDate)
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: true)
-
-        let query = HKSampleQuery(sampleType: dataType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sortDescriptor]) {
+        
+        let query =  HKSampleQuery(sampleType: dataType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sortDescriptor]) {
             x, samplesOrNil, error in
-
+            
             guard let samples = samplesOrNil as? [HKQuantitySample] else {
-                guard let samplesCategory = samplesOrNil as? [HKCategorySample] else {
+                guard var samplesCategory = samplesOrNil as? [HKCategorySample] else {
                     result(FlutterError(code: "FlutterHealth", message: "Results are null", details: "\(error)"))
                     return
                 }
                 print(samplesCategory)
-                result(samplesCategory.map { sample -> NSDictionary in
-                    let unit = self.unitLookUp(key: dataTypeKey)
-
-                    return [
+                
+                result(
+                    do {
+                        try samplesCategory.map { sample -> NSDictionary in
+                    
+                        let unit = self.unitLookUp(key: dataTypeKey)
+                    
+                        return [
                         "uuid": "\(sample.uuid)",
                         "value": sample.value,
                         "date_from": Int(sample.startDate.timeIntervalSince1970 * 1000),
                         "date_to": Int(sample.endDate.timeIntervalSince1970 * 1000),
-                    ]
-                })
-                return
+                        ]
+                        })
+                    } catch {
+                        return FlutterError(code: "FlutterHealth", message: "Error", details: "\(error)")
+                    }
+                    return
             }
-            result(samples.map { sample -> NSDictionary in
-                let unit = self.unitLookUp(key: dataTypeKey)
-
-                return [
+            result(
+                do {
+                    try samples.map { sample -> NSDictionary in
+                    let unit = self.unitLookUp(key: dataTypeKey)
+                
+                    return [
                     "uuid": "\(sample.uuid)",
                     "value": sample.quantity.doubleValue(for: unit),
                     "date_from": Int(sample.startDate.timeIntervalSince1970 * 1000),
                     "date_to": Int(sample.endDate.timeIntervalSince1970 * 1000),
-                ]
-            })
-            return
+                    ]
+                    })
+                } catch {
+                    return FlutterError(code: "FlutterHealth", message: "Error", details: "\(error)")
+                }
+                return
         }
+        
         HKHealthStore().execute(query)
+        
     }
-
+    
     func unitLookUp(key: String) -> HKUnit {
-        guard let unit = unitDict[key] else {
+        guard let try unit = unitDict[key] else {
             return HKUnit.count()
         }
         return unit
     }
-
+    
     func dataTypeLookUp(key: String) -> HKSampleType {
         guard let dataType_ = dataTypesDict[key] else {
             return HKSampleType.quantityType(forIdentifier: .bodyMass)!
         }
         return dataType_
     }
-
+    
     func initializeTypes() {
         unitDict[ACTIVE_ENERGY_BURNED] = HKUnit.kilocalorie()
         unitDict[BASAL_ENERGY_BURNED] = HKUnit.kilocalorie()
@@ -182,7 +196,7 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
         unitDict[SLEEP_IN_BED] = HKUnit.init(from: "")
         unitDict[SLEEP_ASLEEP] = HKUnit.init(from: "")
         unitDict[SLEEP_AWAKE] = HKUnit.init(from: "")
-
+        
         // Set up iOS 11 specific types (ordinary health data types)
         if #available(iOS 11.0, *) {
             dataTypesDict[ACTIVE_ENERGY_BURNED] = HKSampleType.quantityType(forIdentifier: .activeEnergyBurned)!
@@ -210,7 +224,7 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
             dataTypesDict[SLEEP_IN_BED] = HKSampleType.categoryType(forIdentifier: .sleepAnalysis)!
             dataTypesDict[SLEEP_ASLEEP] = HKSampleType.categoryType(forIdentifier: .sleepAnalysis)!
             dataTypesDict[SLEEP_AWAKE] = HKSampleType.categoryType(forIdentifier: .sleepAnalysis)!
-
+            
             healthDataTypes = Array(dataTypesDict.values)
         }
         // Set up heart rate data types specific to the apple watch, requires iOS 12
@@ -218,14 +232,14 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
             dataTypesDict[HIGH_HEART_RATE_EVENT] = HKSampleType.categoryType(forIdentifier: .highHeartRateEvent)!
             dataTypesDict[LOW_HEART_RATE_EVENT] = HKSampleType.categoryType(forIdentifier: .lowHeartRateEvent)!
             dataTypesDict[IRREGULAR_HEART_RATE_EVENT] = HKSampleType.categoryType(forIdentifier: .irregularHeartRhythmEvent)!
-
+            
             heartRateEventTypes =  Set([
                 HKSampleType.categoryType(forIdentifier: .highHeartRateEvent)!,
                 HKSampleType.categoryType(forIdentifier: .lowHeartRateEvent)!,
                 HKSampleType.categoryType(forIdentifier: .irregularHeartRhythmEvent)!,
-                ])
+            ])
         }
-
+        
         // Concatenate heart events and health data types (both may be empty)
         allDataTypes = Set(heartRateEventTypes + healthDataTypes)
     }
