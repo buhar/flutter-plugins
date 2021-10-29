@@ -111,35 +111,37 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
 
             guard let samples = samplesOrNil as? [HKQuantitySample] else {
                 guard let samplesCategory = samplesOrNil as? [HKCategorySample] else {
-                    result(FlutterError(code: "FlutterHealth", message: "Results are null", details: "\(error)"))
-                    return
+                    DispatchQueue.main.async {
+                        result(FlutterError(code: "FlutterHealth", message: "Results are null", details: "\(error)"))
+                    }
                 }
-                print(samplesCategory)
-                result(samplesCategory.map { sample -> NSDictionary in
+                DispatchQueue.main.async {
+                    result(samplesCategory.map { sample -> NSDictionary in
+                        let unit = self.unitLookUp(key: dataTypeKey)
+
+                        return [
+                            "uuid": "\(sample.uuid)",
+                            "value": sample.value,
+                            "date_from": Int(sample.startDate.timeIntervalSince1970 * 1000),
+                            "date_to": Int(sample.endDate.timeIntervalSince1970 * 1000),
+                        ]
+                    })
+                }
+            }
+            DispatchQueue.main.async {
+                result(samples.map { sample -> NSDictionary in
                     let unit = self.unitLookUp(key: dataTypeKey)
 
                     return [
                         "uuid": "\(sample.uuid)",
-                        "value": sample.value,
+                        "value": sample.quantity.doubleValue(for: unit),
                         "date_from": Int(sample.startDate.timeIntervalSince1970 * 1000),
                         "date_to": Int(sample.endDate.timeIntervalSince1970 * 1000),
+                        "source_id": sample.sourceRevision.source.bundleIdentifier,
+                        "source_name": sample.sourceRevision.source.name
                     ]
                 })
-                return
             }
-            result(samples.map { sample -> NSDictionary in
-                let unit = self.unitLookUp(key: dataTypeKey)
-
-                return [
-                    "uuid": "\(sample.uuid)",
-                    "value": sample.quantity.doubleValue(for: unit),
-                    "date_from": Int(sample.startDate.timeIntervalSince1970 * 1000),
-                    "date_to": Int(sample.endDate.timeIntervalSince1970 * 1000),
-                    "source_id": sample.sourceRevision.source.bundleIdentifier,
-                    "source_name": sample.sourceRevision.source.name
-                ]
-            })
-            return
         }
         HKHealthStore().execute(query)
     }
