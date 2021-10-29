@@ -114,6 +114,8 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
                     DispatchQueue.main.async {
                         result(FlutterError(code: "FlutterHealth", message: "Results are null", details: "\(error)"))
                     }
+                    return
+
                 }
                 DispatchQueue.main.async {
                     result(samplesCategory.map { sample -> NSDictionary in
@@ -127,6 +129,7 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
                         ]
                     })
                 }
+                return
             }
             DispatchQueue.main.async {
                 result(samples.map { sample -> NSDictionary in
@@ -142,6 +145,7 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
                     ]
                 })
             }
+            return
         }
         HKHealthStore().execute(query)
     }
