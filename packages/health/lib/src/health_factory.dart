@@ -34,6 +34,11 @@ class HealthFactory {
     return hasPermissions;
   }
 
+  Future<bool> disconnectGoogleFit() async {
+    final bool disconnectGoogleFit = await _channel.invokeMethod('disconnectGoogleFit');
+    return disconnectGoogleFit;
+  }
+
   /// Request access to GoogleFit/Apple HealthKit
   Future<bool> requestAuthorization(List<HealthDataType> types) async {
     /// If BMI is requested, then also ask for weight and height
