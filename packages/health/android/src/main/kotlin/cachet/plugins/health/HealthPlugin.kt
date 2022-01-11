@@ -235,6 +235,28 @@ class HealthPlugin : MethodCallHandler, ActivityResultListener, Result, Activity
         )
     }
 
+    private fun disconnectGoogleFit(result: Result) {
+        val fitnessOptions = FitnessOptions.builder().build()
+
+        Fitness.getConfigClient(context, GoogleSignIn.getLastSignedInAccount(context)!!)
+            .disableFit()
+            .continueWithTask {
+                val signInOptions = GoogleSignInOptions.Builder()
+                    .addExtension(fitnessOptions)
+                    .build()
+                GoogleSignIn.getClient(context, signInOptions)
+                    .revokeAccess()
+                    .addOnSuccessListener {
+                        result.success(true)
+                    }
+                    .addOnFailureListener {
+                        // receives error with no message and status code 4
+                        result.success(false)
+                    }
+            }
+
+    }
+
     /// Called when the "hasPermissions" is invoked from Flutter
     private fun hasPermissions(call: MethodCall, result: Result) {
         val options = callToHealthTypes(call)
@@ -275,6 +297,7 @@ class HealthPlugin : MethodCallHandler, ActivityResultListener, Result, Activity
             "hasPermissions" -> hasPermissions(call, result)
             "requestAuthorization" -> requestAuthorization(call, result)
             "getData" -> getData(call, result)
+            "disconnectGoogleFit" -> disconnectGoogleFit(result)
             else -> result.notImplemented()
         }
     }
